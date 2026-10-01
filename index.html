@@ -1,0 +1,453 @@
+import React, { useState, useEffect } from 'react';
+import { 
+  BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid 
+} from 'recharts';
+import { 
+  LayoutDashboard, ShoppingBag, CheckCircle, Users, Shirt, 
+  TrendingUp, Plus, Trash2, Edit, Truck, Calendar, DollarSign, 
+  AlertCircle, ChevronRight, Check
+} from 'lucide-react';
+
+// Sample / Initial Mock Data Structure for Firebase Integration
+const initialOrders = [
+  {
+    id: 'ORD-101',
+    customerName: 'Aisha',
+    whatsapp: '919876543210',
+    platform: 'LEDI',
+    dressType: 'Anarkali Suit',
+    deliveryDate: '2026-10-05',
+    totalRate: 2500,
+    advancePaid: 1000,
+    materialCost: 600,
+    deliveryCharge: 100,
+    assignedEmployee: 'Anu',
+    stitchingCost: 500,
+    status: 'Pending'
+  },
+  {
+    id: 'ORD-102',
+    customerName: 'Fathima',
+    whatsapp: '919876543211',
+    platform: 'BEBI',
+    dressType: 'Frock',
+    deliveryDate: '2026-10-05',
+    totalRate: 1500,
+    advancePaid: 800,
+    materialCost: 300,
+    deliveryCharge: 50,
+    assignedEmployee: 'Nusrath',
+    stitchingCost: 300,
+    status: 'Pending'
+  }
+];
+
+const initialEmployees = [
+  { id: '1', name: 'Anu', role: 'Tailor' },
+  { id: '2', name: 'Nusrath', role: 'Tailor' },
+  { id: '3', name: 'Meema', role: 'Tailor' }
+];
+
+const initialStoreItems = [
+  { id: '1', name: 'Anarkali Dress', minRate: 2000, image: 'https://via.placeholder.com/150' },
+  { id: '2', name: 'Baby Frock', minRate: 1000, image: 'https://via.placeholder.com/150' }
+];
+
+export default function App() {
+  const [activeTab, setActiveTab] = useState('dashboard');
+  const [platformFilter, setPlatformFilter] = useState('ALL'); // ALL, LEDI, BEBI
+  const [orders, setOrders] = useState(initialOrders);
+  const [employees, setEmployees] = useState(initialEmployees);
+  const [store, setStore] = useState(initialStoreItems);
+  const [extraExpenses, setExtraExpenses] = useState([]);
+
+  // Forms State
+  const [newOrder, setNewOrder] = useState({
+    customerName: '', whatsapp: '', platform: 'LEDI', dressType: '',
+    deliveryDate: '', totalRate: 0, advancePaid: 0, materialCost: 0,
+    deliveryCharge: 0, assignedEmployee: '', stitchingCost: 0
+  });
+
+  const [newEmployee, setNewEmployee] = useState({ name: '', role: '' });
+  const [newStoreItem, setNewStoreItem] = useState({ name: '', minRate: 0, image: '' });
+  const [newExpense, setNewExpense] = useState({ title: '', amount: 0, platform: 'LEDI' });
+
+  // --- CALCULATIONS ---
+  const filteredOrders = orders.filter(o => platformFilter === 'ALL' || o.platform === platformFilter);
+  const pendingOrders = filteredOrders.filter(o => o.status === 'Pending');
+  const completedOrders = filteredOrders.filter(o => o.status === 'Completed');
+
+  // Revenue & Financial Breakdown
+  const totalRevenue = filteredOrders.reduce((acc, curr) => acc + Number(curr.totalRate), 0);
+  const totalMaterialCost = filteredOrders.reduce((acc, curr) => acc + Number(curr.materialCost), 0);
+  const totalDeliveryCost = filteredOrders.reduce((acc, curr) => acc + Number(curr.deliveryCharge), 0);
+  const totalStitchingCost = filteredOrders.reduce((acc, curr) => acc + Number(curr.stitchingCost), 0);
+
+  const totalBaseExpenses = totalMaterialCost + totalDeliveryCost + totalStitchingCost;
+  
+  // Custom Owner Cut Deduction Rule: ₹300 per order deducted for owner cut
+  const totalOwnerDeduction = filteredOrders.reduce((acc, curr) => {
+    const rawProfit = curr.totalRate - (curr.materialCost + curr.deliveryCharge + curr.stitchingCost);
+    return acc + (rawProfit > 300 ? 300 : 0);
+  }, 0);
+
+  const rawNetProfit = totalRevenue - totalBaseExpenses;
+  const netBusinessProfit = rawNetProfit - totalOwnerDeduction;
+
+  const totalAdditionalExpenses = extraExpenses
+    .filter(e => platformFilter === 'ALL' || e.platform === platformFilter)
+    .reduce((acc, curr) => acc + Number(curr.amount), 0);
+
+  const remainingFinalProfit = netBusinessProfit - totalAdditionalExpenses;
+
+  // Order Handlers
+  const handleAddOrder = (e) => {
+    e.preventDefault();
+    const orderObj = { ...newOrder, id: `ORD-${Date.now().toString().slice(-4)}`, status: 'Pending' };
+    setOrders([...orders, orderObj]);
+    setNewOrder({
+      customerName: '', whatsapp: '', platform: 'LEDI', dressType: '',
+      deliveryDate: '', totalRate: 0, advancePaid: 0, materialCost: 0,
+      deliveryCharge: 0, assignedEmployee: '', stitchingCost: 0
+    });
+    setActiveTab('orders');
+  };
+
+  const markAsCompleted = (id) => {
+    setOrders(orders.map(o => o.id === id ? { ...o, status: 'Completed' } : o));
+  };
+
+  const deleteOrder = (id) => {
+    setOrders(orders.filter(o => o.id !== id));
+  };
+
+  // Group deliveries by Date
+  const deliveryGroups = pendingOrders.reduce((acc, curr) => {
+    acc[curr.deliveryDate] = acc[curr.deliveryDate] ? [...acc[curr.deliveryDate], curr] : [curr];
+    return acc;
+  }, {});
+
+  return (
+    <div style={styles.container}>
+      {/* Top Header */}
+      <header style={styles.header}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <Shirt size={28} color="#4F46E5" />
+          <h1 style={styles.headerTitle}>STITCHFLOW ERP</h1>
+        </div>
+        {/* Platform Selector Buttons */}
+        <div style={styles.platformSwitch}>
+          {['ALL', 'LEDI', 'BEBI'].map(p => (
+            <button 
+              key={p} 
+              onClick={() => setPlatformFilter(p)}
+              style={{
+                ...styles.platformBtn,
+                ...(platformFilter === p ? styles.platformBtnActive : {})
+              }}
+            >
+              {p}
+            </button>
+          ))}
+        </div>
+      </header>
+
+      <div style={styles.mainLayout}>
+        {/* Side Navigation Bar */}
+        <aside style={styles.sidebar}>
+          <button style={activeTab === 'dashboard' ? styles.navActive : styles.navBtn} onClick={() => setActiveTab('dashboard')}>
+            <LayoutDashboard size={20} /> <span>Dashboard</span>
+          </button>
+          <button style={activeTab === 'orders' ? styles.navActive : styles.navBtn} onClick={() => setActiveTab('orders')}>
+            <ShoppingBag size={20} /> <span>Orders ({pendingOrders.length})</span>
+          </button>
+          <button style={activeTab === 'completed' ? styles.navActive : styles.navBtn} onClick={() => setActiveTab('completed')}>
+            <CheckCircle size={20} /> <span>Completed ({completedOrders.length})</span>
+          </button>
+          <button style={activeTab === 'employees' ? styles.navActive : styles.navBtn} onClick={() => setActiveTab('employees')}>
+            <Users size={20} /> <span>Employees</span>
+          </button>
+          <button style={activeTab === 'store' ? styles.navActive : styles.navBtn} onClick={() => setActiveTab('store')}>
+            <Shirt size={20} /> <span>Item Store</span>
+          </button>
+          <button style={activeTab === 'analytics' ? styles.navActive : styles.navBtn} onClick={() => setActiveTab('analytics')}>
+            <TrendingUp size={20} /> <span>Analytics</span>
+          </button>
+        </aside>
+
+        {/* Content Area */}
+        <main style={styles.content}>
+          
+          {/* --- DASHBOARD TAB --- */}
+          {activeTab === 'dashboard' && (
+            <div>
+              {/* Stat Cards */}
+              <div style={styles.cardGrid}>
+                <div style={styles.card}>
+                  <p style={styles.cardLabel}>TOTAL REVENUE</p>
+                  <h2 style={styles.cardVal}>₹{totalRevenue}</h2>
+                </div>
+                <div style={styles.card}>
+                  <p style={styles.cardLabel}>NET BUSINESS PROFIT</p>
+                  <h2 style={{ ...styles.cardVal, color: '#10B981' }}>₹{netBusinessProfit}</h2>
+                  <small style={{ color: '#6B7280' }}>(After ₹300 Owner Cut)</small>
+                </div>
+                <div style={styles.card}>
+                  <p style={styles.cardLabel}>REMAINING PROFIT</p>
+                  <h2 style={{ ...styles.cardVal, color: '#059669' }}>₹{remainingFinalProfit}</h2>
+                  <small style={{ color: '#6B7280' }}>(After Extra Expenses)</small>
+                </div>
+                <div style={styles.card}>
+                  <p style={styles.cardLabel}>TOTAL EXPENSES</p>
+                  <h2 style={{ ...styles.cardVal, color: '#EF4444' }}>₹{totalBaseExpenses + totalAdditionalExpenses}</h2>
+                </div>
+              </div>
+
+              {/* Upcoming Delivery Alert Box */}
+              <div style={{ ...styles.section, marginTop: '20px' }}>
+                <h3 style={styles.sectionHeading}><Calendar size={18} /> Upcoming Deliveries Schedule</h3>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  {Object.keys(deliveryGroups).map(date => (
+                    <div key={date} style={styles.deliveryRow}>
+                      <span style={{ fontWeight: 'bold', color: '#4F46E5' }}>{date}</span>
+                      <div style={{ display: 'flex', gap: '10px' }}>
+                        {deliveryGroups[date].map(item => (
+                          <span key={item.id} style={styles.badge}>
+                            {item.customerName} ({item.dressType}) - {item.platform}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                  {Object.keys(deliveryGroups).length === 0 && <p>No pending deliveries.</p>}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* --- PENDING ORDERS TAB --- */}
+          {activeTab === 'orders' && (
+            <div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '15px' }}>
+                <h3>Active Orders List</h3>
+                <button style={styles.primaryBtn} onClick={() => setActiveTab('add-order')}>
+                  <Plus size={16} /> New Order
+                </button>
+              </div>
+
+              <div style={styles.tableContainer}>
+                <table style={styles.table}>
+                  <thead>
+                    <tr>
+                      <th>ID / Cust.</th>
+                      <th>Dress</th>
+                      <th>Platform</th>
+                      <th>Date</th>
+                      <th>Financial Breakdown</th>
+                      <th>Advance vs Material Balance</th>
+                      <th>Custom Profit</th>
+                      <th>Assignee</th>
+                      <th>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {pendingOrders.map(ord => {
+                      const rawProfit = ord.totalRate - (ord.materialCost + ord.deliveryCharge + ord.stitchingCost);
+                      const finalCustProfit = rawProfit > 300 ? rawProfit - 300 : rawProfit;
+                      const advVsMat = ord.advancePaid - ord.materialCost;
+
+                      return (
+                        <tr key={ord.id}>
+                          <td><b>{ord.customerName}</b><br /><small>{ord.whatsapp}</small></td>
+                          <td>{ord.dressType}</td>
+                          <td><span style={ord.platform === 'LEDI' ? styles.badgeLedi : styles.badgeBebi}>{ord.platform}</span></td>
+                          <td>{ord.deliveryDate}</td>
+                          <td>
+                            Rate: ₹{ord.totalRate}<br />
+                            Adv: ₹{ord.advancePaid}<br />
+                            Cost: ₹{ord.materialCost + ord.deliveryCharge + ord.stitchingCost}
+                          </td>
+                          <td style={{ color: advVsMat >= 0 ? '#10B981' : '#EF4444', fontWeight: '600' }}>
+                            ₹{advVsMat}
+                          </td>
+                          <td style={{ color: '#10B981', fontWeight: 'bold' }}>₹{finalCustProfit}</td>
+                          <td>{ord.assignedEmployee} (₹{ord.stitchingCost})</td>
+                          <td>
+                            <button style={styles.actionBtnSuccess} onClick={() => markAsCompleted(ord.id)} title="Complete">
+                              <Check size={16} />
+                            </button>
+                            <button style={styles.actionBtnDanger} onClick={() => deleteOrder(ord.id)} title="Delete">
+                              <Trash2 size={16} />
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* --- ADD ORDER FORM TAB --- */}
+          {activeTab === 'add-order' && (
+            <div style={styles.formCard}>
+              <h3>Create New Order</h3>
+              <form onSubmit={handleAddOrder} style={styles.formGrid}>
+                <input placeholder="Customer Name" required value={newOrder.customerName} onChange={e => setNewOrder({ ...newOrder, customerName: e.target.value })} style={styles.input} />
+                <input placeholder="WhatsApp Number" required value={newOrder.whatsapp} onChange={e => setNewOrder({ ...newOrder, whatsapp: e.target.value })} style={styles.input} />
+                <select value={newOrder.platform} onChange={e => setNewOrder({ ...newOrder, platform: e.target.value })} style={styles.input}>
+                  <option value="LEDI">LEDI (Lady)</option>
+                  <option value="BEBI">BEBI (Baby)</option>
+                </select>
+                <input placeholder="Dress Name" required value={newOrder.dressType} onChange={e => setNewOrder({ ...newOrder, dressType: e.target.value })} style={styles.input} />
+                <input type="date" required value={newOrder.deliveryDate} onChange={e => setNewOrder({ ...newOrder, deliveryDate: e.target.value })} style={styles.input} />
+                <input type="number" placeholder="Total Rate" required value={newOrder.totalRate || ''} onChange={e => setNewOrder({ ...newOrder, totalRate: Number(e.target.value) })} style={styles.input} />
+                <input type="number" placeholder="Advance Paid" value={newOrder.advancePaid || ''} onChange={e => setNewOrder({ ...newOrder, advancePaid: Number(e.target.value) })} style={styles.input} />
+                <input type="number" placeholder="Material Cost" value={newOrder.materialCost || ''} onChange={e => setNewOrder({ ...newOrder, materialCost: Number(e.target.value) })} style={styles.input} />
+                <input type="number" placeholder="Delivery Charge" value={newOrder.deliveryCharge || ''} onChange={e => setNewOrder({ ...newOrder, deliveryCharge: Number(e.target.value) })} style={styles.input} />
+                <select value={newOrder.assignedEmployee} onChange={e => setNewOrder({ ...newOrder, assignedEmployee: e.target.value })} style={styles.input} required>
+                  <option value="">Select Employee</option>
+                  {employees.map(emp => <option key={emp.id} value={emp.name}>{emp.name}</option>)}
+                </select>
+                <input type="number" placeholder="Stitching Charge / Payout" value={newOrder.stitchingCost || ''} onChange={e => setNewOrder({ ...newOrder, stitchingCost: Number(e.target.value) })} style={styles.input} />
+                
+                <button type="submit" style={{ ...styles.primaryBtn, gridColumn: 'span 2' }}>Save Order</button>
+              </form>
+            </div>
+          )}
+
+          {/* --- COMPLETED ORDERS TAB --- */}
+          {activeTab === 'completed' && (
+            <div>
+              <h3>Completed Orders History</h3>
+              <div style={styles.tableContainer}>
+                <table style={styles.table}>
+                  <thead>
+                    <tr>
+                      <th>Customer Name</th>
+                      <th>Dress</th>
+                      <th>Platform</th>
+                      <th>Total Rate</th>
+                      <th>Net Profit Generated</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {completedOrders.map(ord => {
+                      const rawProfit = ord.totalRate - (ord.materialCost + ord.deliveryCharge + ord.stitchingCost);
+                      const finalProfit = rawProfit > 300 ? rawProfit - 300 : rawProfit;
+                      return (
+                        <tr key={ord.id}>
+                          <td><b>{ord.customerName}</b></td>
+                          <td>{ord.dressType}</td>
+                          <td><span style={styles.badge}>{ord.platform}</span></td>
+                          <td>₹{ord.totalRate}</td>
+                          <td style={{ color: '#10B981', fontWeight: 'bold' }}>₹{finalProfit}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* --- EMPLOYEES TAB --- */}
+          {activeTab === 'employees' && (
+            <div>
+              <h3>Employee Earnings & Dashboard</h3>
+              <div style={styles.cardGrid}>
+                {employees.map(emp => {
+                  const empEarnings = orders
+                    .filter(o => o.assignedEmployee === emp.name)
+                    .reduce((acc, curr) => acc + Number(curr.stitchingCost), 0);
+
+                  return (
+                    <div key={emp.id} style={styles.card}>
+                      <h4>{emp.name}</h4>
+                      <p style={{ color: '#6B7280' }}>Role: {emp.role}</p>
+                      <h3 style={{ color: '#4F46E5', marginTop: '10px' }}>Total Earned: ₹{empEarnings}</h3>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* --- STORE TAB --- */}
+          {activeTab === 'store' && (
+            <div>
+              <h3>Dress Catalog / Item Store</h3>
+              <div style={styles.cardGrid}>
+                {store.map(item => (
+                  <div key={item.id} style={styles.card}>
+                    <img src={item.image} alt={item.name} style={{ width: '100%', height: '120px', objectFit: 'cover', borderRadius: '6px' }} />
+                    <h4 style={{ marginTop: '10px' }}>{item.name}</h4>
+                    <p style={{ fontWeight: 'bold', color: '#10B981' }}>Min Rate: ₹{item.minRate}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* --- ANALYTICS TAB --- */}
+          {activeTab === 'analytics' && (
+            <div>
+              <h3>Business Analytics & Performance</h3>
+              <div style={{ ...styles.section, height: '350px' }}>
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={[
+                    { name: 'Revenue', amount: totalRevenue },
+                    { name: 'Base Expenses', amount: totalBaseExpenses },
+                    { name: 'Net Business Profit', amount: netBusinessProfit },
+                    { name: 'Remaining Profit', amount: remainingFinalProfit }
+                  ]}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="name" />
+                    <YAxis />
+                    <Tooltip />
+                    <Bar dataKey="amount" fill="#4F46E5" radius={[6, 6, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+          )}
+
+        </main>
+      </div>
+    </div>
+  );
+}
+
+// Inline Styling Object for UI
+const styles = {
+  container: { fontFamily: 'Inter, sans-serif', backgroundColor: '#F3F4F6', minHeight: '100vh' },
+  header: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#FFFFFF', padding: '15px 30px', borderBottom: '1px solid #E5E7EB' },
+  headerTitle: { fontSize: '20px', fontWeight: 'bold', color: '#111827' },
+  platformSwitch: { display: 'flex', gap: '5px', backgroundColor: '#F3F4F6', padding: '4px', borderRadius: '8px' },
+  platformBtn: { border: 'none', padding: '6px 16px', borderRadius: '6px', cursor: 'pointer', fontWeight: '600', color: '#4B5563', backgroundColor: 'transparent' },
+  platformBtnActive: { backgroundColor: '#4F46E5', color: '#FFFFFF' },
+  mainLayout: { display: 'flex', padding: '20px', gap: '20px' },
+  sidebar: { width: '220px', display: 'flex', flexDirection: 'column', gap: '8px' },
+  navBtn: { display: 'flex', alignItems: 'center', gap: '10px', padding: '12px 16px', border: 'none', backgroundColor: '#FFFFFF', borderRadius: '8px', cursor: 'pointer', fontWeight: '500', color: '#374151' },
+  navActive: { display: 'flex', alignItems: 'center', gap: '10px', padding: '12px 16px', border: 'none', backgroundColor: '#4F46E5', color: '#FFFFFF', borderRadius: '8px', cursor: 'pointer', fontWeight: '600' },
+  content: { flex: 1, backgroundColor: '#FFFFFF', padding: '24px', borderRadius: '12px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' },
+  cardGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '15px' },
+  card: { backgroundColor: '#F9FAFB', padding: '16px', borderRadius: '8px', border: '1px solid #E5E7EB' },
+  cardLabel: { fontSize: '12px', color: '#6B7280', fontWeight: '700' },
+  cardVal: { fontSize: '22px', fontWeight: 'bold', marginTop: '5px' },
+  section: { backgroundColor: '#F9FAFB', padding: '16px', borderRadius: '8px', border: '1px solid #E5E7EB' },
+  sectionHeading: { display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' },
+  deliveryRow: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px', backgroundColor: '#FFFFFF', borderRadius: '6px' },
+  badge: { backgroundColor: '#E0E7FF', color: '#4338CA', padding: '4px 8px', borderRadius: '4px', fontSize: '12px', fontWeight: '600' },
+  badgeLedi: { backgroundColor: '#FCE7F3', color: '#BE185D', padding: '4px 8px', borderRadius: '4px', fontSize: '12px', fontWeight: '600' },
+  badgeBebi: { backgroundColor: '#FEF3C7', color: '#D97706', padding: '4px 8px', borderRadius: '4px', fontSize: '12px', fontWeight: '600' },
+  tableContainer: { overflowX: 'auto' },
+  table: { width: '100%', borderCollapse: 'collapse', textAlign: 'left', marginTop: '10px' },
+  primaryBtn: { display: 'flex', alignItems: 'center', gap: '6px', backgroundColor: '#4F46E5', color: '#FFF', border: 'none', padding: '10px 16px', borderRadius: '6px', cursor: 'pointer', fontWeight: '600' },
+  actionBtnSuccess: { backgroundColor: '#10B981', color: '#FFF', border: 'none', padding: '6px', borderRadius: '4px', cursor: 'pointer', marginRight: '5px' },
+  actionBtnDanger: { backgroundColor: '#EF4444', color: '#FFF', border: 'none', padding: '6px', borderRadius: '4px', cursor: 'pointer' },
+  formCard: { maxWidth: '600px', margin: '0 auto' },
+  formGrid: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginTop: '15px' },
+  input: { padding: '10px', borderRadius: '6px', border: '1px solid #D1D5DB', fontSize: '14px' }
+};
